@@ -41,7 +41,8 @@ jobs:
         python -m pip install --no-cache numpy==1.26.4 --trusted-host pypi.org &&
         python -m pip install --no-cache --upgrade setuptools --trusted-host pypi.org &&
         python -m pip install --no-cache pyyaml typing-extensions --trusted-host pypi.org &&
-        git submodule update --init --recursive &&  # Initialize submodules
+        git config --global --add safe.directory /app &&  # Mark /app as a safe directory
+        git submodule update --init --recursive &&
         python setup.py bdist_wheel"
 
     - name: List wheel files
