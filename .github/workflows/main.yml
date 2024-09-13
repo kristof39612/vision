@@ -1,34 +1,49 @@
 name: Build Python Wheel on Alpine Linux
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
+      with:
+        submodules: true  # Ensure submodules are initialized
+        fetch-depth: 0    # Fetch all history for proper versioning
 
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.x'  # Specify the Python version you want to use
+        python-version: '3.11'  # Specify the Python version you want to use
+
+    - name: Get Artifact from Other Repo
+      run: |
+        ARTIFACT_ID=$(curl -s -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+        "https://api.github.com/repos/kristof39612/pytorch_alpine/actions/runs/10829839898/artifacts" | jq -r '.artifacts[0].id') &&
+        curl -L -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+        -o artifact.zip "https://api.github.com/repos/kristof39612/pytorch_alpine/actions/artifacts/$ARTIFACT_ID/zip"
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}  # Your GitHub PAT
 
     - name: Build wheel in Alpine Linux
       run: |
         docker run --rm -v $(pwd):/app -w /app python:3.11-alpine \
         /bin/sh -c "
-        apk add --no-cache bash git lapack-dev ninja openblas-dev linux-headers musl-dev libffi-dev gfortran cmake build-base &&
-        python -m pip install --upgrade pip setuptools wheel &&
+        apk add --no-cache bash git lapack-dev ninja openblas-dev linux-headers musl-dev libffi-dev gfortran cmake build-base bash libstdc++ openblas-dev unzip jq &&
+        unzip artifact.zip -d artifact_dir &&  # Unzip the artifact
+        python -m pip install --no-cache --upgrade pip --trusted-host pypi.org &&
+        python -m pip install --no-cache artifact_dir/*.whl --trusted-host pypi.org &&
+        rm -f artifact.zip artifact_dir/*.whl &&  # Remove the zip and the .whl file after installation
+        rmdir artifact_dir &&  # Remove the directory after the .whl file is deleted
+        python -m pip install --no-cache numpy==1.26.4 --trusted-host pypi.org &&
+        python -m pip install --no-cache --upgrade setuptools --trusted-host pypi.org &&
+        python -m pip install --no-cache pyyaml typing-extensions --trusted-host pypi.org &&
+        git submodule update --init --recursive &&  # Initialize submodules
         python setup.py bdist_wheel"
-        
+
     - name: List wheel files
       run: ls dist/*.whl
 
